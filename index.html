@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b0e14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="BP Tracker" />
+  <title>BP Tracker</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Google API client -->
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0b0e14; --bg-2:#0f1319; --surface:#141920; --surface-2:#1a2030; --surface-3:#202840;
+      --border:rgba(255,255,255,0.06); --border-md:rgba(255,255,255,0.10); --border-hover:rgba(255,255,255,0.18);
+      --blue:#4d8ef5; --blue-dim:rgba(77,142,245,0.10); --blue-glow:rgba(77,142,245,0.22); --blue-line:rgba(77,142,245,0.30);
+      --teal:#26d9a4; --teal-dim:rgba(38,217,164,0.10);
+      --amber:#f0a230; --amber-dim:rgba(240,162,48,0.10);
+      --red:#ed5252; --red-dim:rgba(237,82,82,0.10);
+      --purple:#c084fc; --purple-dim:rgba(192,132,252,0.10);
+      --text:#dde2f0; --text-2:#7a8499; --text-3:#3a4155;
+      --mono:'DM Mono',monospace;
+      --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:18px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family:'DM Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+      background:var(--bg); color:var(--text); min-height:100vh;
+      padding:env(safe-area-inset-top,1rem) 1.25rem 5rem;
+      padding-top: max(env(safe-area-inset-top), 1.5rem);
+      line-height:1.6; font-size:14px;
+    }
+    .container { max-width:880px; margin:0 auto; }
+
+    /* ── Header ── */
+    .app-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:2rem; padding-bottom:1.25rem; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .brand-icon { width:42px; height:42px; border-radius:var(--r-lg); background:linear-gradient(135deg,#1e2d50,#162040); border:1px solid var(--blue-line); display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+    .brand h1 { font-size:17px; font-weight:600; letter-spacing:-0.3px; }
+    .brand p  { font-size:12px; color:var(--text-2); margin-top:1px; }
+
+    /* ── Drive sync bar ── */
+    .sync-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .sync-status {
+      display:flex; align-items:center; gap:6px;
+      font-size:11px; color:var(--text-2);
+      background:var(--surface-2); border:1px solid var(--border-md);
+      border-radius:20px; padding:4px 12px;
+    }
+    .sync-dot { width:7px; height:7px; border-radius:50%; background:var(--text-3); flex-shrink:0; }
+    .sync-dot.connected { background:var(--teal); box-shadow:0 0 6px var(--teal); }
+    .sync-dot.syncing   { background:var(--amber); animation:pulse 1s infinite; }
+    .sync-dot.error     { background:var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    button.drive-btn {
+      display:flex; align-items:center; gap:6px;
+      padding:5px 14px; font-size:12px; font-weight:500;
+      font-family:'DM Sans',sans-serif;
+      background:var(--surface-2); border:1px solid var(--border-md);
+      border-radius:var(--r-md); cursor:pointer; color:var(--text-2);
+      transition:all 0.15s;
+    }
+    button.drive-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+    button.drive-btn .drive-icon { font-size:14px; }
+
+    /* ── Stats ── */
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:1.25rem; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:1rem 1.25rem; position:relative; overflow:hidden; }
+    .stat-card::after { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--sc-color,var(--blue)); opacity:0.8; }
+    .stat-card.c-teal  { --sc-color:var(--teal); }
+    .stat-card.c-amber { --sc-color:var(--amber); }
+    .stat-card.c-red   { --sc-color:var(--red); }
+    .sc-label { font-size:10px; font-weight:500; color:var(--text-2); text-transform:uppercase; letter-spacing:0.7px; margin-bottom:8px; }
+    .sc-value { font-family:var(--mono); font-size:24px; font-weight:500; letter-spacing:-0.5px; line-height:1; }
+    .sc-sub   { font-size:11px; font-weight:400; margin-left:4px; font-family:'DM Sans',sans-serif; }
+
+    /* ── Cards ── */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:1.25rem; margin-bottom:1.25rem; }
+    .card-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; }
+    .card-title { font-size:11px; font-weight:600; color:var(--text-2); text-transform:uppercase; letter-spacing:0.8px; display:flex; align-items:center; gap:8px; }
+    .ct-pip { width:6px; height:6px; border-radius:50%; background:var(--blue); flex-shrink:0; }
+
+    /* ── Form ── */
+    .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; align-items:end; }
+    .fg label { display:block; font-size:10px; font-weight:600; color:var(--text-2); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:5px; }
+    input[type="date"],input[type="time"],input[type="number"],select {
+      width:100%; padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif;
+      background:var(--surface-2); color:var(--text);
+      border:1px solid var(--border-md); border-radius:var(--r-md);
+      outline:none; transition:border-color 0.15s,box-shadow 0.15s;
+      -webkit-appearance:none; appearance:none;
+    }
+    input:hover,select:hover { border-color:var(--border-hover); }
+    input:focus,select:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
+    input[type="file"] { display:none; }
+    button.primary {
+      width:100%; padding:10px 16px; font-size:13px; font-weight:600;
+      font-family:'DM Sans',sans-serif; background:var(--blue); color:#fff;
+      border:none; border-radius:var(--r-md); cursor:pointer;
+      box-shadow:0 4px 16px rgba(77,142,245,0.30);
+      transition:opacity 0.15s,transform 0.1s;
+    }
+    button.primary:hover { opacity:0.88; }
+    button.primary:active { transform:scale(0.98); }
+    .form-error { font-size:12px; color:var(--red); margin-top:8px; display:none; }
+
+    /* ── Import ── */
+    .import-zone { border:1.5px dashed var(--border-md); border-radius:var(--r-lg); padding:1.75rem 1.5rem; text-align:center; cursor:pointer; transition:border-color 0.2s,background 0.2s; }
+    .import-zone:hover,.import-zone.drag-over { border-color:var(--blue); background:var(--blue-dim); }
+    .iz-icon  { font-size:28px; margin-bottom:8px; }
+    .iz-label { font-size:14px; font-weight:500; }
+    .iz-sub   { font-size:12px; color:var(--text-2); margin-top:4px; }
+    .import-result { margin-top:10px; padding:9px 14px; border-radius:var(--r-md); font-size:12px; display:none; }
+    .import-result.success { background:var(--teal-dim); color:var(--teal); border:1px solid rgba(38,217,164,0.2); }
+    .import-result.error   { background:var(--red-dim);  color:var(--red);  border:1px solid rgba(237,82,82,0.2); }
+
+    /* ── Chart ── */
+    .chart-controls { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:1.1rem; }
+    .view-toggle { display:flex; background:var(--surface-2); border:1px solid var(--border-md); border-radius:var(--r-md); padding:3px; gap:2px; }
+    .view-toggle button { padding:5px 14px; font-size:12px; font-weight:500; font-family:'DM Sans',sans-serif; background:none; border:none; border-radius:var(--r-sm); color:var(--text-2); cursor:pointer; transition:background 0.15s,color 0.15s; }
+    .view-toggle button.active { background:var(--blue); color:#fff; }
+    .view-toggle button:not(.active):hover { background:var(--surface-3); color:var(--text); }
+    .period-nav { display:flex; align-items:center; gap:8px; }
+    .pn-btn { width:30px; height:30px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); border:1px solid var(--border-md); border-radius:var(--r-sm); font-size:14px; cursor:pointer; color:var(--text-2); transition:all 0.15s; }
+    .pn-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+    .pn-btn:disabled { opacity:0.25; cursor:default; pointer-events:none; }
+    .pn-label { font-size:13px; font-weight:500; min-width:175px; text-align:center; }
+    .today-btn { padding:5px 12px; font-size:10px; font-weight:600; font-family:'DM Sans',sans-serif; letter-spacing:0.5px; text-transform:uppercase; background:var(--surface-2); border:1px solid var(--border-md); border-radius:var(--r-sm); color:var(--text-2); cursor:pointer; transition:all 0.15s; }
+    .today-btn:hover { border-color:var(--blue); color:var(--blue); }
+    .chart-legend { display:flex; gap:16px; font-size:12px; color:var(--text-2); margin-bottom:1rem; align-items:center; flex-wrap:wrap; }
+    .leg-item { display:flex; align-items:center; gap:6px; }
+    .leg-dot  { width:8px; height:8px; border-radius:50%; }
+    .leg-toggle { cursor:pointer; padding:3px 10px 3px 6px; border:1px solid var(--border-md); border-radius:20px; transition:all 0.2s; }
+    .leg-toggle:hover { border-color:var(--purple); background:var(--purple-dim); }
+    .leg-toggle.active { border-color:rgba(192,132,252,0.4); background:var(--purple-dim); }
+    .leg-toggle.active .leg-dot { opacity:1 !important; }
+    .leg-toggle.active span     { opacity:1 !important; }
+    .chart-wrap { position:relative; width:100%; height:300px; }
+    .chart-empty { display:none; position:absolute; inset:0; align-items:center; justify-content:center; font-size:13px; color:var(--text-3); }
+    #bpChart { cursor:pointer; }
+
+    /* ── Detail modal ── */
+    .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); backdrop-filter:blur(6px); z-index:200; align-items:center; justify-content:center; }
+    .modal-backdrop.open { display:flex; }
+    .modal { background:var(--surface); border:1px solid var(--border-md); border-radius:var(--r-xl); width:90%; max-width:420px; overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,0.5); }
+    .modal-top { background:var(--surface-2); padding:1.1rem 1.5rem; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; justify-content:space-between; }
+    .modal-top-title { font-size:11px; font-weight:600; color:var(--text-2); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:3px; }
+    .modal-top-ts { font-family:var(--mono); font-size:14px; }
+    .modal-close-btn { background:var(--surface-3); border:none; width:28px; height:28px; border-radius:50%; font-size:16px; cursor:pointer; color:var(--text-2); display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-left:12px; transition:background 0.15s; }
+    .modal-close-btn:hover { background:var(--red-dim); color:var(--red); }
+    .modal-bp-row { display:flex; gap:1px; border-bottom:1px solid var(--border); }
+    .modal-bp-cell { flex:1; padding:1.1rem; text-align:center; background:var(--surface-2); border-right:1px solid var(--border); }
+    .modal-bp-cell:last-child { border-right:none; }
+    .mbc-label { font-size:10px; font-weight:600; color:var(--text-2); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:5px; }
+    .mbc-value { font-family:var(--mono); font-size:30px; font-weight:500; letter-spacing:-1px; line-height:1; }
+    .mbc-unit  { font-size:11px; color:var(--text-2); margin-top:3px; }
+    .modal-details { padding:0.9rem 1.5rem; }
+    .md-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+    .md-row:last-child { border-bottom:none; }
+    .md-key { font-size:12px; color:var(--text-2); }
+    .md-val { font-size:13px; font-weight:500; }
+    .modal-actions { padding:0.9rem 1.5rem; border-top:1px solid var(--border); display:flex; gap:8px; }
+    .modal-actions button { flex:1; padding:9px; font-size:12px; font-weight:500; font-family:'DM Sans',sans-serif; border-radius:var(--r-md); cursor:pointer; transition:all 0.15s; }
+    .ma-close { background:var(--surface-2); border:1px solid var(--border-md); color:var(--text-2); }
+    .ma-close:hover { border-color:var(--border-hover); color:var(--text); }
+    .ma-jump  { background:var(--blue); border:none; color:#fff; box-shadow:0 4px 14px rgba(77,142,245,0.28); }
+    .ma-jump:hover { opacity:0.88; }
+
+    /* ── Edit modal ── */
+    .em-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .em-grid .fg { display:flex; flex-direction:column; gap:5px; }
+    .em-grid .fg label { font-size:10px; font-weight:600; color:var(--text-2); text-transform:uppercase; letter-spacing:0.6px; }
+    .edit-error { font-size:12px; color:var(--red); margin-top:8px; display:none; }
+
+    /* ── History ── */
+    .filter-row { display:flex; gap:10px; align-items:center; margin-bottom:1rem; flex-wrap:wrap; }
+    .filter-row .fl { font-size:10px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.5px; }
+    .filter-row select { width:auto; padding:6px 10px; font-size:12px; }
+    button.danger-link { background:none; border:none; font-size:11px; color:var(--text-3); cursor:pointer; font-family:'DM Sans',sans-serif; transition:color 0.15s; }
+    button.danger-link:hover { color:var(--red); }
+    .hist-table { width:100%; border-collapse:collapse; }
+    .hist-table thead th { font-size:10px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:0.6px; padding:6px 10px; text-align:left; border-bottom:1px solid var(--border); }
+    .hist-table tbody tr { transition:background 0.12s; }
+    .hist-table tbody tr:hover { background:var(--surface-2); }
+    .hist-table tbody tr.hl td { background:rgba(77,142,245,0.08) !important; }
+    .hist-table tbody td { padding:9px 10px; border-bottom:1px solid var(--border); font-size:12px; vertical-align:middle; }
+    .hist-table tbody tr:last-child td { border-bottom:none; }
+    .td-ts  { color:var(--text-2); font-family:var(--mono); font-size:11px; }
+    .td-val { font-family:var(--mono); font-weight:500; font-size:13px; }
+    .td-mmhg { font-size:10px; font-weight:400; color:var(--text-3); margin-left:2px; font-family:'DM Sans',sans-serif; }
+    .badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:600; letter-spacing:0.3px; }
+    .cat-normal   { background:rgba(38,217,164,0.10); color:var(--teal); }
+    .cat-elevated { background:rgba(240,162,48,0.10); color:var(--amber); }
+    .cat-high1    { background:rgba(237,82,82,0.10);  color:var(--red); }
+    .cat-high2    { background:rgba(192,57,43,0.14);  color:#e96060; }
+    .src-withings { background:rgba(77,142,245,0.10); color:var(--blue); }
+    .src-manual   { background:var(--surface-3); color:var(--text-3); }
+    button.rm-btn { background:none; border:1px solid transparent; border-radius:var(--r-sm); font-size:10px; color:var(--text-3); cursor:pointer; padding:3px 8px; font-family:'DM Sans',sans-serif; transition:all 0.15s; }
+    button.rm-btn:hover { border-color:var(--red); color:var(--red); }
+    .edit-pencil { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:4px; background:none; border:1px solid transparent; color:var(--text-3); font-size:11px; cursor:pointer; margin-left:5px; vertical-align:middle; transition:all 0.15s; font-family:'DM Sans',sans-serif; }
+    .edit-pencil:hover { background:var(--blue-dim); border-color:var(--blue-line); color:var(--blue); }
+    .empty-msg { color:var(--text-3); font-size:13px; padding:1rem 0; }
+    .pagination { display:flex; align-items:center; gap:8px; margin-top:1.1rem; font-size:12px; color:var(--text-2); justify-content:center; }
+    .pagination button { background:var(--surface-2); border:1px solid var(--border-md); border-radius:var(--r-sm); padding:5px 14px; font-size:12px; cursor:pointer; color:var(--text); font-family:'DM Sans',sans-serif; }
+    .pagination button:hover { border-color:var(--blue); color:var(--blue); }
+    .pagination button:disabled { opacity:0.25; cursor:default; pointer-events:none; }
+
+    footer { text-align:center; font-size:11px; color:var(--text-3); margin-top:3rem; padding-top:1.25rem; border-top:1px solid var(--border); }
+    footer strong { color:var(--blue); font-weight:500; }
+
+    /* ── Setup banner ── */
+    .setup-banner { background:rgba(240,162,48,0.08); border:1px solid rgba(240,162,48,0.25); border-radius:var(--r-lg); padding:1rem 1.25rem; margin-bottom:1.25rem; font-size:12px; color:var(--amber); display:none; }
+    .setup-banner a { color:var(--amber); }
+    .setup-banner strong { font-weight:600; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="app-header">
+    <div class="brand">
+      <div class="brand-icon">🫀</div>
+      <div>
+        <h1>BP Tracker</h1>
+        <p id="header-date"></p>
+      </div>
+    </div>
+    <div class="sync-bar">
+      <div class="sync-status">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-label">Not connected</span>
+      </div>
+      <button class="drive-btn" id="drive-btn" onclick="handleDriveAuth()">
+        <span class="drive-icon">🔗</span>
+        <span id="drive-btn-label">Connect Drive</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Setup banner (shown if no CLIENT_ID configured) -->
+  <div class="setup-banner" id="setup-banner">
+    ⚙️ <strong>Setup required:</strong> Open <code>index.html</code> and replace <code>YOUR_GOOGLE_CLIENT_ID</code> with your Google OAuth Client ID.
+    <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console →</a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card"><div class="sc-label">Latest reading</div><div class="sc-value" id="stat-latest">—</div></div>
+    <div class="stat-card c-teal"><div class="sc-label">Avg systolic</div><div class="sc-value" id="stat-sys">—</div></div>
+    <div class="stat-card c-amber"><div class="sc-label">Avg diastolic</div><div class="sc-value" id="stat-dia">—</div></div>
+    <div class="stat-card c-red"><div class="sc-label">Total readings</div><div class="sc-value" id="stat-count">0</div></div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card">
+    <div class="card-hd"><div class="card-title"><div class="ct-pip"></div> Blood pressure chart</div></div>
+    <div class="chart-controls">
+      <div class="view-toggle">
+        <button id="btn-week" class="active" onclick="setView('week')">Week</button>
+        <button id="btn-month" onclick="setView('month')">Month</button>
+        <button id="btn-year"  onclick="setView('year')">Year</button>
+      </div>
+      <div class="period-nav">
+        <button class="pn-btn" id="nav-prev" onclick="navPeriod(-1)">&#8592;</button>
+        <div class="pn-label" id="period-label">—</div>
+        <button class="pn-btn" id="nav-next" onclick="navPeriod(1)">&#8594;</button>
+        <button class="today-btn" onclick="goToToday()">Today</button>
+      </div>
+    </div>
+    <div class="chart-legend">
+      <div class="leg-item"><div class="leg-dot" style="background:#4d8ef5;"></div> Systolic</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#26d9a4;"></div> Diastolic</div>
+      <div class="leg-item leg-toggle" id="hr-toggle" onclick="toggleHR()">
+        <div class="leg-dot" style="background:#c084fc;opacity:0.35;"></div>
+        <span style="opacity:0.45;">Heart rate</span>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="bpChart" role="img" aria-label="Blood pressure chart">No data.</canvas>
+      <div class="chart-empty" id="chart-empty">No readings in this period</div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-3);text-align:right;">Click any point to view detail</div>
+  </div>
+
+  <!-- Import -->
+  <div class="card">
+    <div class="card-hd"><div class="card-title"><div class="ct-pip" style="background:var(--teal);"></div> Import from Withings</div></div>
+    <div class="import-zone" id="drop-zone" onclick="document.getElementById('csv-file').click()">
+      <div class="iz-icon">📂</div>
+      <div class="iz-label">Click or drag your Withings CSV export here</div>
+      <div class="iz-sub">Supports standard Withings blood pressure export format</div>
+      <input type="file" id="csv-file" accept=".csv" onchange="handleFileSelect(event)" />
+    </div>
+    <div class="import-result" id="import-result"></div>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <div class="card-hd"><div class="card-title"><div class="ct-pip" style="background:var(--amber);"></div> Log a reading</div></div>
+    <div class="form-grid">
+      <div class="fg"><label>Date</label><input type="date" id="inp-date" /></div>
+      <div class="fg"><label>Time</label><input type="time" id="inp-time" /></div>
+      <div class="fg"><label>Systolic (mmHg)</label><input type="number" id="inp-sys" placeholder="120" min="60" max="250" /></div>
+      <div class="fg"><label>Diastolic (mmHg)</label><input type="number" id="inp-dia" placeholder="80" min="40" max="160" /></div>
+      <div class="fg"><label>Heart rate (bpm)</label><input type="number" id="inp-hr" placeholder="72" min="30" max="220" /></div>
+      <div class="fg"><label>&nbsp;</label><button class="primary" onclick="addReading()">Add reading</button></div>
+    </div>
+    <div class="form-error" id="form-error"></div>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-title"><div class="ct-pip" style="background:var(--text-3);"></div> Reading history</div>
+      <button class="danger-link" onclick="clearAll()">Clear all data</button>
+    </div>
+    <div class="filter-row">
+      <span class="fl">Filter:</span>
+      <select id="cat-filter" onchange="renderHistory()">
+        <option value="all">All categories</option>
+        <option value="Normal">Normal</option>
+        <option value="Elevated">Elevated</option>
+        <option value="High stage 1">High stage 1</option>
+        <option value="High stage 2">High stage 2</option>
+      </select>
+      <select id="source-filter" onchange="renderHistory()">
+        <option value="all">All sources</option>
+        <option value="withings">Withings</option>
+        <option value="manual">Manual</option>
+      </select>
+    </div>
+    <div id="history-list"><p class="empty-msg">No readings logged yet.</p></div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <footer>Data synced to Google Drive &nbsp;·&nbsp; <strong>BP Tracker</strong></footer>
+</div>
+
+<!-- Detail modal -->
+<div class="modal-backdrop" id="detail-modal" onclick="closeModalBack(event)">
+  <div class="modal">
+    <div class="modal-top">
+      <div><div class="modal-top-title">Reading detail</div><div class="modal-top-ts" id="modal-ts">—</div></div>
+      <button class="modal-close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-bp-row" id="modal-bp"></div>
+    <div class="modal-details" id="modal-details"></div>
+    <div class="modal-actions">
+      <button class="ma-close" onclick="closeModal()">Close</button>
+      <button class="ma-jump"  onclick="jumpToReading()">Jump to in history ↓</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-backdrop" id="edit-modal" onclick="closeEditModalBack(event)">
+  <div class="modal">
+    <div class="modal-top">
+      <div><div class="modal-top-title">Edit reading</div><div class="modal-top-ts" id="edit-modal-ts">—</div></div>
+      <button class="modal-close-btn" onclick="closeEditModal()">×</button>
+    </div>
+    <div style="padding:1.25rem 1.5rem;">
+      <div class="em-grid">
+        <div class="fg"><label>Date</label><input type="date" id="edit-date" /></div>
+        <div class="fg"><label>Time</label><input type="time" id="edit-time" /></div>
+        <div class="fg"><label>Systolic (mmHg)</label><input type="number" id="edit-sys" min="60" max="250" /></div>
+        <div class="fg"><label>Diastolic (mmHg)</label><input type="number" id="edit-dia" min="40" max="160" /></div>
+        <div class="fg"><label>Heart rate (bpm)</label><input type="number" id="edit-hr" min="30" max="220" placeholder="Optional" /></div>
+      </div>
+      <div class="edit-error" id="edit-error"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ma-close" onclick="closeEditModal()">Cancel</button>
+      <button class="ma-jump"  onclick="saveEdit()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CONFIGURATION — replace with your Google OAuth Client ID   ║
+// ║  Instructions in SETUP.md                                   ║
+// ╚══════════════════════════════════════════════════════════════╝
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
+const DRIVE_FILE_NAME  = 'bp_tracker_data.json';
+const SCOPES           = 'https://www.googleapis.com/auth/drive.file';
+
+// ── App state ────────────────────────────────────────────────
+const STORE_KEY = 'bp_readings_v3';
+let chart = null;
+const PAGE_SIZE = 20;
+let currentPage = 0;
+let viewMode = 'week';
+let periodOffset = 0;
+let modalTargetTs = null;
+let chartPeriodData = [];
+let editTargetTs = null;
+let showHR = false;
+
+// Drive state
+let driveAccessToken = null;
+let driveFileId = null;
+let syncPending = false;
+let syncTimer = null;
+
+// ── Local storage ────────────────────────────────────────────
+function load() { try { return JSON.parse(localStorage.getItem(STORE_KEY)||'[]'); } catch { return []; } }
+function save(d) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(d)); } catch {}
+  scheduleDriveSync();
+}
+
+// ── Category ─────────────────────────────────────────────────
+function category(sys, dia) {
+  if (sys<120&&dia<80) return {label:'Normal',      cls:'cat-normal',  color:'#26d9a4'};
+  if (sys<130&&dia<80) return {label:'Elevated',    cls:'cat-elevated',color:'#f0a230'};
+  if (sys<140||dia<90) return {label:'High stage 1',cls:'cat-high1',   color:'#ed5252'};
+  return                      {label:'High stage 2',cls:'cat-high2',   color:'#e96060'};
+}
+
+function nowValues() {
+  const d=new Date();
+  return {date:d.toISOString().slice(0,10),time:d.toTimeString().slice(0,5)};
+}
+
+// ══════════════════════════════════════════════════════════════
+// GOOGLE DRIVE SYNC
+// ══════════════════════════════════════════════════════════════
+
+function setSyncStatus(state, msg) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  dot.className = 'sync-dot' + (state ? ' '+state : '');
+  lbl.textContent = msg;
+}
+
+function handleDriveAuth() {
+  if (GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') {
+    alert('Please set your Google Client ID in index.html first.\nSee SETUP.md for instructions.');
+    return;
+  }
+  if (driveAccessToken) {
+    // Already connected — disconnect
+    driveAccessToken = null; driveFileId = null;
+    setSyncStatus('', 'Not connected');
+    document.getElementById('drive-btn-label').textContent = 'Connect Drive';
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { setSyncStatus('error','Auth failed'); return; }
+      driveAccessToken = resp.access_token;
+      document.getElementById('drive-btn-label').textContent = 'Disconnect Drive';
+      setSyncStatus('syncing','Connecting…');
+      await initDriveFile();
+    }
+  });
+  client.requestAccessToken();
+}
+
+async function initDriveFile() {
+  try {
+    // Search for existing file
+    const search = await driveRequest('GET',
+      `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILE_NAME}'+and+trashed=false&fields=files(id,name,modifiedTime)`
+    );
+    const files = search.files || [];
+    if (files.length > 0) {
+      driveFileId = files[0].id;
+      setSyncStatus('syncing','Loading from Drive…');
+      await loadFromDrive();
+    } else {
+      setSyncStatus('syncing','Creating Drive file…');
+      await createDriveFile();
+    }
+    setSyncStatus('connected','Drive synced');
+    renderAll();
+  } catch(e) {
+    setSyncStatus('error','Drive error');
+    console.error('Drive init error:', e);
+  }
+}
+
+async function loadFromDrive() {
+  const content = await driveRequest('GET',
+    `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`
+  );
+  if (Array.isArray(content)) {
+    // Merge: Drive wins for any timestamp conflict
+    const local = load();
+    const localTs = new Set(local.map(r=>r.ts));
+    const merged = [...local];
+    for (const r of content) {
+      if (!localTs.has(r.ts)) merged.push(r);
+    }
+    merged.sort((a,b)=>a.ts.localeCompare(b.ts));
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(merged)); } catch {}
+  }
+}
+
+async function createDriveFile() {
+  const data = load();
+  const meta = {name: DRIVE_FILE_NAME, mimeType:'application/json'};
+  const body = JSON.stringify(data);
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',     new Blob([body],               {type:'application/json'}));
+  const resp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+driveAccessToken},
+    body: form
+  });
+  const result = await resp.json();
+  driveFileId = result.id;
+}
+
+async function pushToDrive() {
+  if (!driveAccessToken || !driveFileId) return;
+  try {
+    setSyncStatus('syncing','Syncing…');
+    const body = JSON.stringify(load());
+    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+      method:'PATCH',
+      headers:{'Authorization':'Bearer '+driveAccessToken,'Content-Type':'application/json'},
+      body
+    });
+    setSyncStatus('connected','Drive synced · '+new Date().toLocaleTimeString());
+  } catch(e) {
+    setSyncStatus('error','Sync failed');
+    console.error('Drive push error:', e);
+  }
+}
+
+function scheduleDriveSync() {
+  if (!driveAccessToken) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushToDrive, 2000); // debounce: sync 2s after last change
+}
+
+async function driveRequest(method, url, body) {
+  const opts = {method, headers:{'Authorization':'Bearer '+driveAccessToken}};
+  if (body) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(body); }
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`Drive API ${r.status}: ${await r.text()}`);
+  try { return await r.json(); } catch { return null; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHART
+// ══════════════════════════════════════════════════════════════
+
+function toggleHR() {
+  showHR = !showHR;
+  document.getElementById('hr-toggle').classList.toggle('active', showHR);
+  renderChart();
+}
+
+function getPeriodBounds(mode, offset) {
+  const now=new Date(); let start,end,label;
+  if (mode==='week') {
+    const day=now.getDay()===0?6:now.getDay()-1;
+    const mon=new Date(now); mon.setDate(now.getDate()-day+offset*7); mon.setHours(0,0,0,0);
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6); sun.setHours(23,59,59,999);
+    start=mon; end=sun;
+    const o={month:'short',day:'numeric'};
+    label=`${mon.toLocaleDateString('en-US',o)} – ${sun.toLocaleDateString('en-US',{...o,year:'numeric'})}`;
+  } else if (mode==='month') {
+    const d=new Date(now.getFullYear(),now.getMonth()+offset,1);
+    start=new Date(d.getFullYear(),d.getMonth(),1,0,0,0,0);
+    end=new Date(d.getFullYear(),d.getMonth()+1,0,23,59,59,999);
+    label=d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  } else {
+    const yr=now.getFullYear()+offset;
+    start=new Date(yr,0,1,0,0,0,0); end=new Date(yr,11,31,23,59,59,999);
+    label=String(yr);
+  }
+  return {start,end,label};
+}
+
+function getPeriodData() {
+  const {start,end}=getPeriodBounds(viewMode,periodOffset);
+  const s=start.toISOString().slice(0,16),e=end.toISOString().slice(0,16);
+  return load().filter(r=>r.ts>=s&&r.ts<=e);
+}
+
+function setView(m){viewMode=m;periodOffset=0;['week','month','year'].forEach(v=>document.getElementById('btn-'+v).classList.toggle('active',v===m));renderChart();}
+function navPeriod(d){periodOffset+=d;if(periodOffset>0)periodOffset=0;renderChart();}
+function goToToday(){periodOffset=0;renderChart();}
+
+function aggregateByMonth(data) {
+  const b={};
+  data.forEach(r=>{const k=r.date.slice(0,7);if(!b[k])b[k]={sys:[],dia:[],hr:[]};b[k].sys.push(r.sys);b[k].dia.push(r.dia);if(r.hr)b[k].hr.push(r.hr);});
+  return Object.entries(b).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>({
+    label:new Date(k+'-01').toLocaleDateString('en-US',{month:'short'}),
+    sys:Math.round(v.sys.reduce((a,x)=>a+x,0)/v.sys.length),
+    dia:Math.round(v.dia.reduce((a,x)=>a+x,0)/v.dia.length),
+    hr: v.hr.length?Math.round(v.hr.reduce((a,x)=>a+x,0)/v.hr.length):null,
+    count:v.sys.length
+  }));
+}
+
+function buildChartOptions(tooltipExtra) {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    interaction:{mode:'nearest',axis:'x',intersect:true},
+    onClick:(evt,elements)=>{
+      if(viewMode==='year'||!elements||!elements.length)return;
+      const r=chartPeriodData[elements[0].index];
+      if(r)openDetailModal(r);
+    },
+    plugins:{
+      legend:{display:false},
+      tooltip:{
+        backgroundColor:'#141920',borderColor:'rgba(77,142,245,0.25)',borderWidth:1,
+        titleColor:'#7a8499',bodyColor:'#dde2f0',padding:12,cornerRadius:8,
+        callbacks:{
+          label:ctx=>{
+            if(ctx.dataset.label==='Heart rate') return `  Heart rate: ${ctx.parsed.y} bpm`;
+            return `  ${ctx.dataset.label}: ${ctx.parsed.y} mmHg`;
+          },
+          afterBody:items=>{
+            if(viewMode!=='year') return '  ↗ Click to view detail';
+            if(tooltipExtra.length&&items[0]) return '  '+(tooltipExtra[items[0].dataIndex]||'');
+            return '';
+          }
+        }
+      }
+    },
+    scales:{
+      x:{ticks:{font:{size:11,family:"'DM Mono',monospace"},color:'#3a4155',maxRotation:45,autoSkip:true,maxTicksLimit:14},grid:{color:'rgba(255,255,255,0.03)'},border:{color:'rgba(255,255,255,0.05)'}},
+      y:{min:40,max:210,title:{display:showHR,text:'mmHg',color:'#3a4155',font:{size:10}},ticks:{font:{size:11,family:"'DM Mono',monospace"},color:'#3a4155',callback:v=>v},grid:{color:'rgba(255,255,255,0.03)'},border:{color:'rgba(255,255,255,0.05)'}},
+      ...(showHR?{yHR:{position:'right',min:30,max:160,title:{display:true,text:'bpm',color:'#9061c2',font:{size:10}},ticks:{font:{size:11,family:"'DM Mono',monospace"},color:'#9061c2',callback:v=>v},grid:{drawOnChartArea:false},border:{color:'rgba(192,132,252,0.2)'}}}:{})
+    }
+  };
+}
+
+function renderChart() {
+  const {label}=getPeriodBounds(viewMode,periodOffset);
+  document.getElementById('period-label').textContent=label;
+  document.getElementById('nav-next').disabled=periodOffset>=0;
+  const raw=getPeriodData(); chartPeriodData=raw;
+  const emptyEl=document.getElementById('chart-empty');
+  let labels,sysData,diaData,hrData=[],tooltipExtra=[];
+  const isBar=viewMode==='year';
+  if (isBar) {
+    const agg=aggregateByMonth(raw);
+    labels=agg.map(a=>a.label); sysData=agg.map(a=>a.sys); diaData=agg.map(a=>a.dia);
+    hrData=agg.map(a=>a.hr); tooltipExtra=agg.map(a=>`${a.count} reading${a.count!==1?'s':''}`);
+  } else {
+    labels=raw.map(r=>{const d=new Date(r.ts);return viewMode==='month'?d.toLocaleDateString('en-US',{month:'short',day:'numeric'}):d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' '+r.time;});
+    sysData=raw.map(r=>r.sys); diaData=raw.map(r=>r.dia); hrData=raw.map(r=>r.hr||null);
+  }
+  emptyEl.style.display=labels.length===0?'flex':'none';
+  const pointR=(!isBar&&((viewMode==='month'&&raw.length>60)||(viewMode==='week'&&raw.length>30)))?0:(isBar?0:3);
+  const hitR=14;
+  const datasets=[
+    {label:'Systolic',data:sysData,borderColor:'#4d8ef5',backgroundColor:isBar?'rgba(77,142,245,0.55)':'rgba(77,142,245,0.05)',tension:0.35,pointRadius:pointR,pointHoverRadius:7,pointHitRadius:hitR,borderWidth:2,fill:false,yAxisID:'y'},
+    {label:'Diastolic',data:diaData,borderColor:'#26d9a4',backgroundColor:isBar?'rgba(38,217,164,0.55)':'rgba(38,217,164,0.05)',tension:0.35,pointRadius:pointR,pointHoverRadius:7,pointHitRadius:hitR,borderWidth:2,fill:false,borderDash:isBar?[]:[5,4],yAxisID:'y'}
+  ];
+  if(showHR){datasets.push({label:'Heart rate',data:hrData,borderColor:'#c084fc',backgroundColor:'rgba(192,132,252,0.06)',tension:0.35,pointRadius:pointR,pointHoverRadius:7,pointHitRadius:hitR,borderWidth:2,fill:false,borderDash:[3,3],yAxisID:'yHR',spanGaps:true});}
+  if(chart&&(chart.config.type==='bar')!==isBar){chart.destroy();chart=null;}
+  if(!chart){
+    chart=new Chart(document.getElementById('bpChart'),{type:isBar?'bar':'line',data:{labels,datasets},options:buildChartOptions(tooltipExtra)});
+  } else {
+    chart.data.labels=labels; chart.data.datasets=datasets;
+    chart.options=buildChartOptions(tooltipExtra); chart.update();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODALS
+// ══════════════════════════════════════════════════════════════
+
+function openDetailModal(r) {
+  modalTargetTs=r.ts;
+  const cat=category(r.sys,r.dia),src=(r.source||'manual')==='withings'?'Withings':'Manual';
+  document.getElementById('modal-ts').textContent=r.date+'  ·  '+r.time;
+  document.getElementById('modal-bp').innerHTML=`
+    <div class="modal-bp-cell"><div class="mbc-label">Systolic</div><div class="mbc-value" style="color:#4d8ef5;">${r.sys}</div><div class="mbc-unit">mmHg</div></div>
+    <div class="modal-bp-cell"><div class="mbc-label">Diastolic</div><div class="mbc-value" style="color:#26d9a4;">${r.dia}</div><div class="mbc-unit">mmHg</div></div>
+    <div class="modal-bp-cell"><div class="mbc-label">Category</div><div class="mbc-value" style="font-size:14px;letter-spacing:0;color:${cat.color};margin-top:6px;">${cat.label}</div><div class="mbc-unit">&nbsp;</div></div>`;
+  const ex=[];
+  if(r.hr) ex.push(`<div class="md-row"><span class="md-key">Heart rate</span><span class="md-val">${r.hr} bpm</span></div>`);
+  ex.push(`<div class="md-row"><span class="md-key">Source</span><span class="md-val">${src}</span></div>`);
+  if(r.comment) ex.push(`<div class="md-row"><span class="md-key">Note</span><span class="md-val" style="font-size:12px;font-weight:400;">${r.comment}</span></div>`);
+  document.getElementById('modal-details').innerHTML=ex.join('');
+  document.getElementById('detail-modal').classList.add('open');
+}
+function closeModal(){document.getElementById('detail-modal').classList.remove('open');}
+function closeModalBack(e){if(e.target===document.getElementById('detail-modal'))closeModal();}
+
+function jumpToReading() {
+  if(!modalTargetTs)return; closeModal();
+  document.getElementById('cat-filter').value='all';
+  document.getElementById('source-filter').value='all';
+  const all=load().slice().reverse();
+  const idx=all.findIndex(r=>r.ts===modalTargetTs);
+  if(idx===-1)return;
+  currentPage=Math.floor(idx/PAGE_SIZE); renderHistory();
+  setTimeout(()=>{
+    const el=document.getElementById('history-list');
+    el.scrollIntoView({behavior:'smooth',block:'start'});
+    const rows=el.querySelectorAll('tbody tr');
+    const ri=idx%PAGE_SIZE;
+    if(rows[ri]){rows[ri].classList.add('hl');setTimeout(()=>rows[ri].classList.remove('hl'),2200);}
+  },180);
+}
+
+function openEditModal(ts) {
+  const r=load().find(x=>x.ts===ts); if(!r)return;
+  editTargetTs=ts;
+  document.getElementById('edit-modal-ts').textContent='Original: '+r.date+'  ·  '+r.time;
+  document.getElementById('edit-date').value=r.date;
+  document.getElementById('edit-time').value=r.time;
+  document.getElementById('edit-sys').value=r.sys;
+  document.getElementById('edit-dia').value=r.dia;
+  document.getElementById('edit-hr').value=r.hr||'';
+  document.getElementById('edit-error').style.display='none';
+  document.getElementById('edit-modal').classList.add('open');
+}
+function closeEditModal(){document.getElementById('edit-modal').classList.remove('open');}
+function closeEditModalBack(e){if(e.target===document.getElementById('edit-modal'))closeEditModal();}
+
+function saveEdit() {
+  const date=document.getElementById('edit-date').value,time=document.getElementById('edit-time').value;
+  const sys=parseInt(document.getElementById('edit-sys').value),dia=parseInt(document.getElementById('edit-dia').value);
+  const hr=parseInt(document.getElementById('edit-hr').value);
+  const errEl=document.getElementById('edit-error'); errEl.style.display='none';
+  if(!date||!time){errEl.textContent='Please enter a date and time.';errEl.style.display='block';return;}
+  if(isNaN(sys)||sys<60||sys>250){errEl.textContent='Systolic must be between 60 and 250.';errEl.style.display='block';return;}
+  if(isNaN(dia)||dia<40||dia>160){errEl.textContent='Diastolic must be between 40 and 160.';errEl.style.display='block';return;}
+  if(!isNaN(hr)&&(hr<30||hr>220)){errEl.textContent='Heart rate must be between 30 and 220.';errEl.style.display='block';return;}
+  const data=load(); const idx=data.findIndex(x=>x.ts===editTargetTs);
+  if(idx===-1){closeEditModal();return;}
+  data[idx]={...data[idx],date,time,sys,dia,hr:isNaN(hr)?null:hr,ts:`${date}T${time}`};
+  data.sort((a,b)=>a.ts.localeCompare(b.ts));
+  save(data); closeEditModal(); renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════
+// DATA — ADD / DELETE / CLEAR
+// ══════════════════════════════════════════════════════════════
+
+function addReading() {
+  const date=document.getElementById('inp-date').value,time=document.getElementById('inp-time').value;
+  const sys=parseInt(document.getElementById('inp-sys').value),dia=parseInt(document.getElementById('inp-dia').value);
+  const hr=parseInt(document.getElementById('inp-hr').value);
+  document.getElementById('form-error').style.display='none';
+  if(!date||!time){showErr('Please enter a date and time.');return;}
+  if(isNaN(sys)||sys<60||sys>250){showErr('Systolic must be between 60 and 250.');return;}
+  if(isNaN(dia)||dia<40||dia>160){showErr('Diastolic must be between 40 and 160.');return;}
+  if(!isNaN(hr)&&(hr<30||hr>220)){showErr('Heart rate must be between 30 and 220.');return;}
+  const data=load();
+  data.push({date,time,sys,dia,hr:isNaN(hr)?null:hr,source:'manual',ts:`${date}T${time}`});
+  data.sort((a,b)=>a.ts.localeCompare(b.ts)); save(data);
+  document.getElementById('inp-sys').value='';
+  document.getElementById('inp-dia').value='';
+  document.getElementById('inp-hr').value='';
+  currentPage=0; renderAll();
+}
+function showErr(m){const e=document.getElementById('form-error');e.textContent=m;e.style.display='block';}
+function deleteReading(ts){save(load().filter(r=>r.ts!==ts));renderAll();}
+function clearAll(){if(confirm('Delete all readings? This cannot be undone.')){save([]);currentPage=0;renderAll();}}
+
+// ══════════════════════════════════════════════════════════════
+// WITHINGS CSV
+// ══════════════════════════════════════════════════════════════
+
+function handleFileSelect(e){const f=e.target.files[0];if(f)parseCSV(f);e.target.value='';}
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)parseCSV(f);});
+
+function parseCSV(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const lines=e.target.result.trim().split('\n');
+    const header=lines[0].toLowerCase().replace(/"/g,'');
+    if(!header.includes('systolic')||!header.includes('diastolic')){showImportResult('error','Not a valid Withings BP export.');return;}
+    const existing=load(),existingTs=new Set(existing.map(r=>r.ts));
+    let imported=0,skipped=0,errors=0;
+    for(let i=1;i<lines.length;i++){
+      const line=lines[i].trim();if(!line)continue;
+      const cols=parseCSVLine(line);if(cols.length<4){errors++;continue;}
+      const rawDate=cols[0].replace(/"/g,'').trim();
+      const hr=parseInt(cols[1]),sys=parseInt(cols[2]),dia=parseInt(cols[3]);
+      const comment=cols[4]?cols[4].replace(/"/g,'').trim():'';
+      if(isNaN(sys)||isNaN(dia)){errors++;continue;}
+      const parts=rawDate.split(' ');if(parts.length<2){errors++;continue;}
+      const date=parts[0],time=parts[1].slice(0,5),ts=`${date}T${time}`;
+      if(existingTs.has(ts)){skipped++;continue;}
+      existing.push({date,time,sys,dia,hr:isNaN(hr)?null:hr,comment:comment||'',source:'withings',ts});
+      existingTs.add(ts);imported++;
+    }
+    existing.sort((a,b)=>a.ts.localeCompare(b.ts));save(existing);currentPage=0;renderAll();
+    let msg=`Imported ${imported} reading${imported!==1?'s':''}`;
+    if(skipped>0)msg+=`, ${skipped} duplicate${skipped!==1?'s':''} skipped`;
+    if(errors>0)msg+=`, ${errors} row${errors!==1?'s':''} skipped`;
+    showImportResult('success',msg+'.');
+  };
+  reader.readAsText(file);
+}
+function parseCSVLine(line){const r=[];let c='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){q=!q;}else if(ch===','&&!q){r.push(c);c='';}else{c+=ch;}}r.push(c);return r;}
+function showImportResult(t,m){const el=document.getElementById('import-result');el.className=`import-result ${t}`;el.textContent=m;el.style.display='block';}
+
+// ══════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════
+
+function renderStats(){
+  const all=load();document.getElementById('stat-count').textContent=all.length;
+  if(!all.length){['stat-latest','stat-sys','stat-dia'].forEach(id=>document.getElementById(id).textContent='—');return;}
+  const last=all[all.length-1],cat=category(last.sys,last.dia);
+  document.getElementById('stat-latest').innerHTML=`${last.sys}/${last.dia}<span class="sc-sub" style="color:${cat.color};">${cat.label}</span>`;
+  document.getElementById('stat-sys').textContent=Math.round(all.reduce((a,r)=>a+r.sys,0)/all.length);
+  document.getElementById('stat-dia').textContent=Math.round(all.reduce((a,r)=>a+r.dia,0)/all.length);
+}
+
+function renderHistory(){
+  const catF=document.getElementById('cat-filter').value,srcF=document.getElementById('source-filter').value;
+  let data=load().slice().reverse();
+  if(catF!=='all')data=data.filter(r=>category(r.sys,r.dia).label===catF);
+  if(srcF!=='all')data=data.filter(r=>(r.source||'manual')===srcF);
+  const total=data.length,maxPage=Math.max(0,Math.ceil(total/PAGE_SIZE)-1);
+  if(currentPage>maxPage)currentPage=maxPage;
+  const page=data.slice(currentPage*PAGE_SIZE,(currentPage+1)*PAGE_SIZE);
+  if(!page.length){document.getElementById('history-list').innerHTML='<p class="empty-msg">No readings match the current filter.</p>';document.getElementById('pagination').innerHTML='';return;}
+  const rows=page.map(r=>{
+    const cat=category(r.sys,r.dia),src=(r.source||'manual')==='withings'?'withings':'manual';
+    const editBtn=src==='manual'?`<button class="edit-pencil" onclick="openEditModal('${r.ts}')" title="Edit">✎</button>`:'';
+    return `<tr data-ts="${r.ts}" class="${src==='manual'?'manual-row':''}">
+      <td class="td-ts">${r.date} ${r.time}${editBtn}</td>
+      <td class="td-val">${r.sys}/${r.dia}<span class="td-mmhg">mmHg</span></td>
+      <td style="color:#7a8499;font-size:12px;">${r.hr?r.hr+' bpm':'—'}</td>
+      <td><span class="badge ${cat.cls}">${cat.label}</span></td>
+      <td><span class="badge ${src==='withings'?'src-withings':'src-manual'}">${src==='withings'?'Withings':'Manual'}</span></td>
+      <td><button class="rm-btn" onclick="deleteReading('${r.ts}')">Remove</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('history-list').innerHTML=`<table class="hist-table"><thead><tr><th>Date &amp; time</th><th>Reading</th><th>Heart rate</th><th>Category</th><th>Source</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  const tp=Math.ceil(total/PAGE_SIZE);
+  document.getElementById('pagination').innerHTML=tp<=1?'':`<button onclick="goPage(${currentPage-1})" ${currentPage===0?'disabled':''}>← Previous</button><span>Page ${currentPage+1} of ${tp} · ${total} readings</span><button onclick="goPage(${currentPage+1})" ${currentPage>=tp-1?'disabled':''}>Next →</button>`;
+}
+function goPage(p){currentPage=p;renderHistory();}
+function renderAll(){renderStats();renderChart();renderHistory();}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+(function(){
+  // Show setup banner if Client ID not configured
+  if(GOOGLE_CLIENT_ID==='113226570678-ou2i2g2jkns9f3lpvd1obiveru0ia7qd.apps.googleusercontent.com') document.getElementById('setup-banner').style.display='block';
+  const t=nowValues();
+  document.getElementById('inp-date').value=t.date;
+  document.getElementById('inp-time').value=t.time;
+  document.getElementById('header-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  // Register service worker
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  renderAll();
+})();
+</script>
+</body>
+</html>
